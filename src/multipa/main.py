@@ -169,6 +169,9 @@ def check_gpus(expected_gpus: int = 0):
     nvml_gpus = pynvml.nvmlDeviceGetCount()
     print("Number of GPUs found by PYNVML:", nvml_gpus)
 
+    if num_gpus != nvml_gpus: 
+        print("WARNING: Number of GPUs detected doesn't match, effective batch size may not be as expected")
+
     for i in range(nvml_gpus):
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(i)
