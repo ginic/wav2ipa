@@ -572,7 +572,7 @@ def get_clean_predictions(
             # Catches TorchCodec RuntimeError (getFramesPlayedInRangeAudio)
             # and any other decoding failures (corrupted files, empty audio, etc.)
             sample = audio_dataset[i]
-            print("Returning empty prediction for sample ", i, " due to RuntimeError. Error: ", e, " Sample: ", sample)
+            print("Returning empty prediction for sample", i, "due to RuntimeError. Error:", e, " Sample:", sample)
             sample[PREDICTION_KEY] = ""
             failed_audios[i] = sample
 
@@ -583,9 +583,9 @@ def get_clean_predictions(
         num_proc=num_proc,
     )
     predictions_dataset = predictions_dataset.rename_column(text_key, PREDICTION_KEY)
-    print("Predictions successfully obtained for ", len(predictions_dataset), " samples.")
+    print("Predictions successfully obtained for", len(predictions_dataset), "samples.")
     print("Example of prediction:", predictions_dataset[0])
-    print("Failures in predicting ", len(failed_audios), " audio files.")
+    print("Failures in predicting", len(failed_audios), "audio files.")
 
     # Insert failed predictions back to final list
     prediction_list = predictions_dataset[PREDICTION_KEY]
