@@ -164,12 +164,19 @@ def check_gpus(expected_gpus: int = 0):
 
     pynvml.nvmlInit()
     num_gpus = torch.cuda.device_count()
+    print("Number of GPUs found by PyTorch:", num_gpus)
 
-    for i in range(num_gpus):
-        handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-        info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-        print(f"GPU {i} handle: {handle}")
-        print(f"GPU {i} memory occupied: {info.used // 1024**2} MB.")
+    nvml_gpus = pynvml.nvmlDeviceGetCount()
+    print("Number of GPUs found by PYNVML:", nvml_gpus)
+
+    for i in range(nvml_gpus):
+        try:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            print(f"GPU {i} handle: {handle}")
+            print(f"GPU {i} memory occupied: {info.used // 1024**2} MB.")
+        except pynvml.NVMLError_InvalidArgument as e:
+            print(f"PNVML failed to find device at index {i} with error:", e)
 
     if expected_gpus > 0 and expected_gpus != num_gpus:
         raise RuntimeError(f"Expected {expected_gpus} gpus, but found only {num_gpus}.")
