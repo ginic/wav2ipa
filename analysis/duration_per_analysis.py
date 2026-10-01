@@ -45,16 +45,17 @@ def make_binned_summary(df, bin_width):
 
     bins = np.arange(MIN_DUR, MAX_DUR + bin_width, bin_width)
 
-    summary = df.groupby(
-        pd.cut(df[DUR], bins, include_lowest=True),
-        observed=True
-    ).agg(
-        bin_start=(DUR, "min"),
-        bin_end=(DUR, "max"),
-        mean_duration=(DUR, "mean"),
-        mean_phone_error_rate=(PER, "mean"),
-        sample_count=(PER, "count"),
-    ).reset_index(drop=True)
+    summary = (
+        df.groupby(pd.cut(df[DUR], bins, include_lowest=True), observed=True)
+        .agg(
+            bin_start=(DUR, "min"),
+            bin_end=(DUR, "max"),
+            mean_duration=(DUR, "mean"),
+            mean_phone_error_rate=(PER, "mean"),
+            sample_count=(PER, "count"),
+        )
+        .reset_index(drop=True)
+    )
 
     return summary[summary["sample_count"] > 0]
 
@@ -67,44 +68,29 @@ def save_csv(df, name):
 
 def plot_per_and_count(summary, xmin, xmax, name, title):
 
-    fig, ax1 = plt.subplots(figsize=(8,5))
+    fig, ax1 = plt.subplots(figsize=(8, 5))
 
     # PER
     ax1.plot(
-        summary["mean_duration"],
-        summary["mean_phone_error_rate"],
-        color="tab:blue",
-        marker="o",
-        linewidth=2,
-        label="PER"
+        summary["mean_duration"], summary["mean_phone_error_rate"], color="tab:blue", marker="o", linewidth=2, label="PER"
     )
 
     ax1.set_xlabel("Duration (seconds)")
     ax1.set_ylabel("Phone Error Rate", color="tab:blue")
-    ax1.tick_params(axis='y', labelcolor="tab:blue")
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
     ax1.set_xlim(xmin, xmax)
 
     # Sample count
     ax2 = ax1.twinx()
 
     ax2.plot(
-        summary["mean_duration"],
-        summary["sample_count"],
-        color="tab:orange",
-        linewidth=2,
-        alpha=0.7,
-        label="Sample Count"
+        summary["mean_duration"], summary["sample_count"], color="tab:orange", linewidth=2, alpha=0.7, label="Sample Count"
     )
 
-    ax2.fill_between(
-        summary["mean_duration"],
-        summary["sample_count"],
-        color="tab:orange",
-        alpha=0.2
-    )
+    ax2.fill_between(summary["mean_duration"], summary["sample_count"], color="tab:orange", alpha=0.2)
 
     ax2.set_ylabel("Sample Count", color="tab:orange")
-    ax2.tick_params(axis='y', labelcolor="tab:orange")
+    ax2.tick_params(axis="y", labelcolor="tab:orange")
     ax2.set_xlim(xmin, xmax)
 
     plt.title(title)
@@ -124,33 +110,24 @@ def make_moving_average(df):
     rows = []
 
     for t in thresholds:
-
         ge = df[df[DUR] >= t]
         le = df[df[DUR] <= t]
 
-        rows.append({
-            "threshold_sec": t,
-            "mean_per_ge": ge[PER].mean(),
-            "mean_per_le": le[PER].mean()
-        })
+        rows.append({"threshold_sec": t, "mean_per_ge": ge[PER].mean(), "mean_per_le": le[PER].mean()})
 
     return pd.DataFrame(rows)
 
 
 def plot_moving(summary, column, name, title, xlabel):
 
-    plt.figure(figsize=(7,5))
+    plt.figure(figsize=(7, 5))
 
-    plt.plot(
-        summary["threshold_sec"],
-        summary[column],
-        linewidth=2
-    )
+    plt.plot(summary["threshold_sec"], summary[column], linewidth=2)
 
     plt.xlabel(xlabel)
     plt.ylabel("Mean Phone Error Rate")
     plt.title(title)
-    plt.xlim(0,12)
+    plt.xlim(0, 12)
     plt.ylim(0.22, 0.40)
 
     plt.grid(alpha=0.3)
@@ -177,33 +154,21 @@ def main():
 
     # 0–1 plots
     plot_per_and_count(
-        make_binned_summary(df[df[DUR] <= 1], BIN_01S),
-        0,1,
-        "0_1.png",
-        "PER and Sample Count vs Duration (0–1s, 0.1s bins)"
+        make_binned_summary(df[df[DUR] <= 1], BIN_01S), 0, 1, "0_1.png", "PER and Sample Count vs Duration (0–1s, 0.1s bins)"
     )
 
     plot_per_and_count(
         make_binned_summary(df[df[DUR] <= 1], BIN_001S),
-        0,1,
+        0,
+        1,
         "0_1_finer.png",
-        "PER and Sample Count vs Duration (0–1s, 0.01s bins)"
+        "PER and Sample Count vs Duration (0–1s, 0.01s bins)",
     )
 
     # 0–12 plots
-    plot_per_and_count(
-        summary_01s,
-        0,12,
-        "0_12_finer.png",
-        "PER and Sample Count vs Duration (0–12s, 0.1s bins)"
-    )
+    plot_per_and_count(summary_01s, 0, 12, "0_12_finer.png", "PER and Sample Count vs Duration (0–12s, 0.1s bins)")
 
-    plot_per_and_count(
-        summary_1s,
-        0,12,
-        "0_12.png",
-        "PER and Sample Count vs Duration (0–12s, 1s bins)"
-    )
+    plot_per_and_count(summary_1s, 0, 12, "0_12.png", "PER and Sample Count vs Duration (0–12s, 1s bins)")
 
     # moving averages
     moving = make_moving_average(df)
@@ -213,7 +178,7 @@ def main():
         "mean_per_ge",
         "moving_average_increasing.png",
         "PER of samples with duration ≥ threshold",
-        "Minimum duration threshold (seconds)"
+        "Minimum duration threshold (seconds)",
     )
 
     plot_moving(
@@ -221,7 +186,7 @@ def main():
         "mean_per_le",
         "moving_average_decreasing.png",
         "PER of samples with duration ≤ threshold",
-        "Maximum duration threshold (seconds)"
+        "Maximum duration threshold (seconds)",
     )
 
     print("\nAll outputs saved in ./output")
