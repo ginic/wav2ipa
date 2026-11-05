@@ -1,5 +1,7 @@
 #!/bin/bash
-# Train an audio to IPA transcription speech recognizer
+# Train an audio to IPA transcription speech recognizer on Unity. This script is for testing with Unity.
+# Note that as of September 2026 for full train jobs to succeed on Unity, you should use the following SBATCH options: 
+# -p gpu-preempt-highvram (since3 we want at least 40GB vram) -G 4 --constraint=vram40 --exclude=gpu058 (this node doesn't support Pytorch)
 
 #SBATCH -c 8
 #SBATCH -n 1
@@ -23,4 +25,5 @@ conda activate ./env_cuda124
 
 # Wrapper script to train models 
 multipa-train --output_dir "$model_dir" --data_dir "$data_dir" --cache_dir "$dataset_cache" --use_gpu --num_train_epochs 2 --num_proc 8 \
+    --mask_time_length 9 \
     buckeye --train_samples 1000 --val_samples 200
