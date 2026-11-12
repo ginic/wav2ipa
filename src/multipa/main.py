@@ -31,6 +31,7 @@ from multipa.data_utils import (
     CommonVoicePreprocessor,
     SimpleSampler,
     SubsetSampler,
+    decode_audio,
 )
 
 logger = logging.getLogger(__name__)
@@ -163,29 +164,46 @@ def check_gpus(expected_gpus: int = 0):
 
     pynvml.nvmlInit()
     num_gpus = torch.cuda.device_count()
+    print("Number of GPUs found by PyTorch:", num_gpus)
 
-    for i in range(num_gpus):
-        handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-        info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-        print(f"GPU {i} handle: {handle}")
-        print(f"GPU {i} memory occupied: {info.used // 1024**2} MB.")
+    nvml_gpus = pynvml.nvmlDeviceGetCount()
+    print("Number of GPUs found by PYNVML:", nvml_gpus)
+
+    if num_gpus != nvml_gpus:
+        print("WARNING: Number of GPUs detected doesn't match, effective batch size may not be as expected")
+
+    for i in range(nvml_gpus):
+        try:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            print(f"GPU {i} handle: {handle}")
+            print(f"GPU {i} memory occupied: {info.used // 1024**2} MB.")
+        except pynvml.NVMLError_InvalidArgument as e:
+            print(f"PNVML failed to find device at index {i} with error:", e)
 
     if expected_gpus > 0 and expected_gpus != num_gpus:
         raise RuntimeError(f"Expected {expected_gpus} gpus, but found only {num_gpus}.")
 
 
 def is_valid_sample(batch):
-    audio = batch["audio"]
     try:
-        if len(audio["array"]) < 1600:  # 0.1 seconds at 16kHz
+        audio = batch["audio"]
+        raw_audio = decode_audio(audio)
+        sample_length = len(raw_audio["raw"])
+
+        if sample_length < raw_audio["sampling_rate"]:  # 0.1 seconds at 16kHz
+            logger.warning("Sample excluded, less than 0.1 seconds: %s", batch)
             return False
         if len(batch["ipa"]) == 0:
+            logger.warning("Sample excluded, missing gold-label IPA transcription: %s", batch)
             return False
-    except RuntimeError:
-        # Sometimes torchcodec throws: RuntimeError: getFramesPlayedInRangeAudio,
-        # /Users/runner/work/torchcodec/torchcodec/meta-pytorch/torchcodec/src/torchcodec/_core/SingleStreamDecoder.cpp:1289,
-        # No audio frames were decoded. This is probably because start_seconds is too high(0),or because stop_seconds(nullopt) is too low.
+
+    except RuntimeError as e:
+        # Catches TorchCodec RuntimeError (getFramesPlayedInRangeAudio)
+        # and any other decoding failures (corrupted files, empty audio, etc.)
+        logger.warning("Sample excluded, RuntimeError. Error: %s , Sample: %s", e, batch)
         return False
+
     return True
 
 
@@ -298,6 +316,7 @@ def main_cli():
         default="~/.cache/huggingface/datasets",
         help="Specify the cache directory's path if you choose to load dataset from non-default cache.",
     )
+
     # Ignore Forvo data for now
     # parser.add_argument("-a", "--additional_data", nargs=1, type=bool, default=False,
     #                    help="Specify if you want to use additional data fetched from Forvo.")
@@ -650,22 +669,19 @@ def main_cli():
     train_result = trainer.train()
     print("Training finished:", train_result)
 
-    if args.use_gpu:
-        try:
-            check_gpus(args.num_gpus)
-        except RuntimeError as e:
-            print("WARNING:", e)
-
     eval_results = trainer.evaluate()
     final_results_to_write.update(eval_results)
     print("Final evaluation results:", eval_results)
+    print("Saving evaluation results to:", output_dir)
     with open(output_dir / "final_evaluation.json", "w") as eval_json:
         json.dump(final_results_to_write, eval_json)
 
+    print("Saving model to:", model_dir)
     trainer.save_state()
     trainer.save_model()
     # You also need to save the tokenizer in order to save the model
     tokenizer_ipa.save_pretrained(model_dir)
+    print("Model saved to:", model_dir)
     # trainer.push_to_hub(repo_name="wav2vec2-ipa")
 
 

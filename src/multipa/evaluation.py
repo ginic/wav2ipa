@@ -19,7 +19,7 @@ import panphon.distance
 import transformers
 import torch
 
-from multipa.data_utils import load_buckeye_split, clean_text, EMPTY_TRANSCRIPTION
+from multipa.data_utils import load_buckeye_split, clean_text, EMPTY_TRANSCRIPTION, decode_audio, GOLD_STANDARD_KEY
 
 PHONE_ERRORS_EVALUATOR = evaluate.load("ginic/phone_errors")
 DETAILED_PREDICTIONS_CSV_SUFFIX = "detailed_predictions.csv"
@@ -456,8 +456,8 @@ def preprocess_test_data(
         lambda x: clean_text(x, is_remove_space=is_remove_space, is_normalize_ipa=is_normalize_ipa), num_proc=num_proc
     )
 
-    empty_test_data = input_data.filter(lambda x: x["ipa"] == EMPTY_TRANSCRIPTION, num_proc=num_proc)
-    non_empty_test_data = input_data.filter(lambda x: x["ipa"] != EMPTY_TRANSCRIPTION, num_proc=num_proc)
+    empty_test_data = input_data.filter(lambda x: x[GOLD_STANDARD_KEY] == EMPTY_TRANSCRIPTION, num_proc=num_proc)
+    non_empty_test_data = input_data.filter(lambda x: x[GOLD_STANDARD_KEY] != EMPTY_TRANSCRIPTION, num_proc=num_proc)
 
     return non_empty_test_data, empty_test_data
 
@@ -544,7 +544,7 @@ def get_clean_predictions(
     is_normalize_ipa: bool = False,
 ):
     """Predicts transcriptions for the audio dataset using the transform pipeline, then
-    puts the clean transcription text in the "prediction" column
+    returns the original Dataset with the clean transcription text in the "prediction" column
 
     Args:
         audio_dataset: HuggingFace format dataset with "audio" column
@@ -559,13 +559,46 @@ def get_clean_predictions(
     Returns:
         datasets.Dataset with clean transcription text in "prediction"
     """
-    predictions_dataset = datasets.Dataset.from_list(transformer_pipe(audio_dataset[audio_key]))
+    # Extract audio inputs using row-level access (avoids Column object issue)
+    # and decode AudioDecoder objects if present
+    audio_inputs = []
+    # Track failed audios, mapping index to data to keep
+    failed_audios = {}
+    for i in range(len(audio_dataset)):
+        audio = audio_dataset[i][audio_key]
+        try:
+            audio_inputs.append(decode_audio(audio))
+        except RuntimeError as e:
+            # Catches TorchCodec RuntimeError (getFramesPlayedInRangeAudio)
+            # and any other decoding failures (corrupted files, empty audio, etc.)
+            sample = audio_dataset[i]
+            print("Returning empty prediction for sample", i, "due to RuntimeError. Error:", e, " Sample:", sample)
+            sample[PREDICTION_KEY] = ""
+            failed_audios[i] = sample
+
+    # Run pipeline directly — no .map(), no pickling needed
+    predictions_dataset = datasets.Dataset.from_list(transformer_pipe(audio_inputs))
     predictions_dataset = predictions_dataset.map(
         lambda x: clean_text(x, text_key=text_key, is_remove_space=is_remove_space, is_normalize_ipa=is_normalize_ipa),
         num_proc=num_proc,
     )
     predictions_dataset = predictions_dataset.rename_column(text_key, PREDICTION_KEY)
-    return predictions_dataset
+    print("Predictions successfully obtained for", len(predictions_dataset), "samples.")
+    print("Example of prediction:", predictions_dataset[0])
+    print("Failures in predicting", len(failed_audios), "audio files.")
+
+    # Insert failed predictions back to final list
+    prediction_list = predictions_dataset[PREDICTION_KEY]
+    full_predictions = []
+    success_idx = 0
+    for i in range(len(audio_dataset)):
+        if i in failed_audios:
+            full_predictions.append("")
+        else:
+            full_predictions.append(prediction_list[success_idx])
+            success_idx += 1
+
+    return audio_dataset.add_column(PREDICTION_KEY, full_predictions)
 
 
 def main(
@@ -623,7 +656,7 @@ def main(
 
             print("Computing performance metrics for non-empty audio transcriptions")
             metrics = model_eval_tracker.eval_non_empty_transcriptions(
-                model, predictions[PREDICTION_KEY], non_empty_test_data["ipa"]
+                model, predictions[PREDICTION_KEY], non_empty_test_data[GOLD_STANDARD_KEY]
             )
 
             if verbose_results_dir:

@@ -1,20 +1,21 @@
-datasets==3.1.0
+datasets[audio]==4.8.4
 epitran==1.24
-evaluate==0.4.3
 eng_to_ipa
-ffmpeg-python==0.2.0
+evaluate==0.4.3
 fsspec==2023.9.2
-jiwer==2.5.1
-librosa==0.9.2
+ipatok
+kaldialign
+librosa>=0.11.0
 mecab-python3==1.0.8
-pandas==1.5.2
-phonecodes==1.1.4
-panphon==0.20.0
-pyarrow==8.0.0
+pandas
+phonecodes>=2.0.0
+panphon @ git+https://github.com/dmort27/panphon.git@6acd3833743a49e63941a0b740ee69eae1dafc1c
+pyarrow
 pydub==0.25.1
 romkan==0.2.1
 torch==2.5.0
-torchaudio==2.5.0
-torchvision==0.20.0
-transformers @ git+https://github.com/huggingface/transformers@799cea64ac1029d66e9e58f18bc6f47892270723
+torchaudio==2.12.0
+torchcodec>=0.14.0
+soundfile
+transformers[torch]==4.43.4
 unidic==1.1.0
